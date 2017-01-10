@@ -1,0 +1,11 @@
+﻿@{
+    Layout = "~/Views/Shared/_html5.cshtml";
+}
+
+@section styles{
+  <link href="@Sdx.Util.Path.AutoMin("https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css")" rel="stylesheet" />
+}
+
+<header>header</header>
+<section>@RenderBody()</section>
+<footer>footer</footer>
