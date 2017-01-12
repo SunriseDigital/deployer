@@ -32,7 +32,7 @@ namespace deployer.Controllers
       //  ssPwd.AppendChar(password[x]);
       //}
       //proc.StartInfo.Password = ssPwd;
-      
+
       proc.Start();
 
       //proc.StandardInput.WriteLine("whoami");
@@ -44,7 +44,7 @@ namespace deployer.Controllers
       Sdx.Context.Current.Debug.Log(proc.StandardError.ReadToEnd());
 
       proc.WaitForExit();
-      
+
       return View();
     }
 
@@ -67,7 +67,7 @@ namespace deployer.Controllers
       //proc.StandardInput.Flush();
       //proc.StandardInput.Close();
 
-      
+
 
       Sdx.Context.Current.Debug.Log(proc.StandardOutput.ReadToEnd());
       Sdx.Context.Current.Debug.Log(proc.StandardError.ReadToEnd());
@@ -75,6 +75,70 @@ namespace deployer.Controllers
       proc.WaitForExit();
 
       return View();
+    }
+
+    public ActionResult GitLib()
+    {
+      var userName = "***";
+      var password = "***";
+      using (var repo = new LibGit2Sharp.Repository(@"C:\Projects\test-manage-on-server"))
+      {
+        //現在の最新のコミットを取得しておく
+        var currentCommit = (LibGit2Sharp.Commit)repo.Commits.Take(1).First();
+
+        //PULLの準備
+        LibGit2Sharp.PullOptions options = new LibGit2Sharp.PullOptions();
+        options.FetchOptions = new LibGit2Sharp.FetchOptions();
+        options.FetchOptions.CredentialsProvider = new LibGit2Sharp.Handlers.CredentialsHandler((url, usernameFromUrl, types) =>
+          new LibGit2Sharp.UsernamePasswordCredentials{Username = userName, Password = password}
+        );
+        var result = repo.Network.Pull(new LibGit2Sharp.Signature(userName, "miyata@sincere-co.com", new DateTimeOffset(DateTime.Now)), options);
+
+        var display = new Dictionary<string, object>();
+        display["Updating"] = currentCommit.Id + "..." + result.Commit.Id;
+        display["Status"] = result.Status;
+
+        var patch = repo.Diff.Compare<LibGit2Sharp.Patch>(currentCommit.Tree, result.Commit.Tree); // Difference
+        display["Files"]  = patch.Select(entry =>
+        {
+          return new Dictionary<string, object> { 
+            {"path", entry.Path},
+            {"status", entry.Status},
+            {"mode", entry.Mode},
+            {"+", entry.LinesAdded},
+            {"-", entry.LinesDeleted}
+            
+          };
+        });
+
+        foreach (var ptc in patch)
+        {
+          Sdx.Context.Current.Debug.Log(ptc);
+        }
+        //foreach (var note in result.Commit.Notes)
+        //{
+        //  Sdx.Context.Current.Debug.Log(note.Message);
+        //}
+
+        Sdx.Context.Current.Debug.Log(display);
+        //ShowCommit(result.Commit);
+
+        //foreach(var commit in result.Commit.Parents)
+        //{
+        //  ShowCommit(commit);
+        //}
+      }
+
+      return View();
+    }
+
+    private void ShowCommit(LibGit2Sharp.Commit commit)
+    {
+      Sdx.Context.Current.Debug.Log(new Dictionary<string, object> { 
+        {"ID", commit.Id},
+        {"Message", commit.Message},
+        {"Files", commit.Tree.Select(tree => tree.Path)}
+      });
     }
   }
 }
