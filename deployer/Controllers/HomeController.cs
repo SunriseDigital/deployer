@@ -83,6 +83,16 @@ namespace deployer.Controllers
       var password = "***";
       using (var repo = new LibGit2Sharp.Repository(@"C:\Projects\test-manage-on-server"))
       {
+        var display = new Dictionary<string, object>();
+
+        //HEADのブランチ取得
+        var currentBranch = repo.Branches.First(branch => branch.IsCurrentRepositoryHead);
+        //HEADブランチのリモートを取得
+        var currentRemote = repo.Network.Remotes.First(remote => remote.Name == currentBranch.RemoteName);
+        display["From"] = currentRemote.Url;
+        display["branch"] = currentBranch.FriendlyName;
+        display["upstrem"] = currentBranch.TrackedBranch.FriendlyName;
+
         //現在の最新のコミットを取得しておく
         var currentCommit = (LibGit2Sharp.Commit)repo.Commits.Take(1).First();
 
@@ -92,52 +102,61 @@ namespace deployer.Controllers
         options.FetchOptions.CredentialsProvider = new LibGit2Sharp.Handlers.CredentialsHandler((url, usernameFromUrl, types) =>
           new LibGit2Sharp.UsernamePasswordCredentials{Username = userName, Password = password}
         );
-        var result = repo.Network.Pull(new LibGit2Sharp.Signature(userName, "miyata@sincere-co.com", new DateTimeOffset(DateTime.Now)), options);
 
-        var display = new Dictionary<string, object>();
-        display["Updating"] = currentCommit.Id + "..." + result.Commit.Id;
-        display["Status"] = result.Status;
-
-        var patch = repo.Diff.Compare<LibGit2Sharp.Patch>(currentCommit.Tree, result.Commit.Tree); // Difference
-        display["Files"]  = patch.Select(entry =>
+        var manager = new LibGit2Sharp.Signature(userName, "miyata@sincere-co.com", new DateTimeOffset(DateTime.Now));
+        //PULL
+        var result = LibGit2Sharp.Commands.Pull(repo, manager, options);
+        
+        //PULLの結果表示
+        if (result.Commit != null)
         {
-          return new Dictionary<string, object> { 
-            {"path", entry.Path},
-            {"status", entry.Status},
-            {"mode", entry.Mode},
-            {"+", entry.LinesAdded},
-            {"-", entry.LinesDeleted}
-            
-          };
-        });
+          display["Updating"] = currentCommit.Id + "..." + result.Commit.Id;
+          display["Status"] = result.Status;
 
-        foreach (var ptc in patch)
-        {
-          Sdx.Context.Current.Debug.Log(ptc);
+          var patch = repo.Diff.Compare<LibGit2Sharp.Patch>(currentCommit.Tree, result.Commit.Tree); // Difference
+          display["Files"] = BuildFiles(patch);
         }
-        //foreach (var note in result.Commit.Notes)
-        //{
-        //  Sdx.Context.Current.Debug.Log(note.Message);
-        //}
+
+        //今回PULLしたコミットを取得
+        foreach (var commit in repo.Commits.TakeWhile(commit => commit.Id != currentCommit.Id))
+        {
+          ShowCommit(repo, commit);
+        }
 
         Sdx.Context.Current.Debug.Log(display);
-        //ShowCommit(result.Commit);
-
-        //foreach(var commit in result.Commit.Parents)
-        //{
-        //  ShowCommit(commit);
-        //}
       }
 
       return View();
     }
 
-    private void ShowCommit(LibGit2Sharp.Commit commit)
+    private IEnumerable<Dictionary<string, object>> BuildFiles(LibGit2Sharp.Patch patch)
     {
+      return patch.Select(entry =>
+      {
+        return new Dictionary<string, object> { 
+              {"path", entry.Path},
+              {"status", entry.Status},
+              {"mode", entry.Mode},
+              {"+", entry.LinesAdded},
+              {"-", entry.LinesDeleted}
+            };
+      });
+    }
+
+    private void ShowCommit(LibGit2Sharp.Repository repo, LibGit2Sharp.Commit commit)
+    {
+      //親コミットとのDiffをとる
+      var files = new List<Dictionary<string, object>>();
+      if(commit.Parents.Count() > 0)
+      {
+        var patch = repo.Diff.Compare<LibGit2Sharp.Patch>(commit.Parents.First().Tree, commit.Tree);
+        files.AddRange(BuildFiles(patch));
+      }
+      
       Sdx.Context.Current.Debug.Log(new Dictionary<string, object> { 
         {"ID", commit.Id},
         {"Message", commit.Message},
-        {"Files", commit.Tree.Select(tree => tree.Path)}
+        {"Files", files}
       });
     }
   }
