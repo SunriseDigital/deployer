@@ -13,6 +13,25 @@ namespace deployer.Controllers
   {
     public ActionResult Compile()
     {
+      Process proc = new System.Diagnostics.Process();
+      SecureString ssPwd = new System.Security.SecureString();
+      proc.StartInfo.UseShellExecute = false;
+      proc.StartInfo.FileName = "cmd.exe";
+      proc.StartInfo.RedirectStandardInput = true;
+      proc.StartInfo.RedirectStandardOutput = true;
+      proc.StartInfo.RedirectStandardError = true;
+
+      proc.Start();
+
+      proc.StandardInput.WriteLine(string.Format(@"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe C:\Projects\cs-sdx\Sdx\Sdx.csproj /p:Configuration=Release"));
+      proc.StandardInput.Flush();
+      proc.StandardInput.Close();
+
+
+      Sdx.Context.Current.Debug.Log(proc.StandardOutput.ReadToEnd());
+      Sdx.Context.Current.Debug.Log(proc.StandardError.ReadToEnd());
+
+
       return View();
     }
 
