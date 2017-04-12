@@ -11,6 +11,11 @@ namespace deployer.Controllers
 {
   public class HomeController : Controller
   {
+    public ActionResult Compile()
+    {
+      return View();
+    }
+
     public ActionResult Index()
     {
       Process proc = new System.Diagnostics.Process();
@@ -158,6 +163,64 @@ namespace deployer.Controllers
         {"Message", commit.Message},
         {"Files", files}
       });
+    }
+
+    public ActionResult GitPrivate()
+    {
+      //var password = "***";
+      using (var repo = new LibGit2Sharp.Repository(@"C:\Projects\cs-sdx"))
+      {
+        var display = new Dictionary<string, object>();
+
+        //HEADのブランチ取得
+        var currentBranch = repo.Branches.First(branch => branch.IsCurrentRepositoryHead);
+        //HEADブランチのリモートを取得
+        var currentRemote = repo.Network.Remotes.First(remote => remote.Name == currentBranch.RemoteName);
+        display["From"] = currentRemote.Url;
+        display["branch"] = currentBranch.FriendlyName;
+        display["upstrem"] = currentBranch.TrackedBranch.FriendlyName;
+
+        //現在の最新のコミットを取得しておく
+        var currentCommit = (LibGit2Sharp.Commit)repo.Commits.Take(1).First();
+
+        //PULLの準備
+        LibGit2Sharp.PullOptions options = new LibGit2Sharp.PullOptions();
+        options.FetchOptions = new LibGit2Sharp.FetchOptions();
+        options.FetchOptions.CredentialsProvider = new LibGit2Sharp.Handlers.CredentialsHandler((url, usernameFromUrl, types) =>
+        {
+          var cred = new LibGit2Sharp.SshUserKeyCredentials();
+          cred.Username = "git";
+          cred.Passphrase = "";
+          //両方のキーに	IUSR・IIS_IUSRSのアクセス権限がある必要がある。
+          cred.PublicKey = @"path\to\public\key";
+          cred.PrivateKey = @"path\to\private\key";
+          return cred;
+        });
+
+        var manager = new LibGit2Sharp.Signature("username", "user@mail.address", new DateTimeOffset(DateTime.Now));
+        //PULL
+        var result = LibGit2Sharp.Commands.Pull(repo, manager, options);
+
+        //PULLの結果表示
+        if (result.Commit != null)
+        {
+          display["Updating"] = currentCommit.Id + "..." + result.Commit.Id;
+          display["Status"] = result.Status;
+
+          var patch = repo.Diff.Compare<LibGit2Sharp.Patch>(currentCommit.Tree, result.Commit.Tree); // Difference
+          display["Files"] = BuildFiles(patch);
+        }
+
+        //今回PULLしたコミットを取得
+        foreach (var commit in repo.Commits.TakeWhile(commit => commit.Id != currentCommit.Id))
+        {
+          ShowCommit(repo, commit);
+        }
+
+        Sdx.Context.Current.Debug.Log(display);
+      }
+
+      return View();
     }
   }
 }
